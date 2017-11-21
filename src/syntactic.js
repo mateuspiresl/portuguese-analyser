@@ -4,8 +4,8 @@ const classification = require('./classification');
 const phraseDelimitierRegex = /^(\.|!|\?|,)$/;
 const phraseEndDelimitierRegex = /^(\.|!|\?)$/;
 
-class EndOfFileError extends Error {
-  constructor () { super('End of file'); }
+class SyntacticError extends Error {
+  constructor (message) { super(message); }
 }
 
 class SyntacticAnalyser
@@ -20,7 +20,7 @@ class SyntacticAnalyser
     // console.log('GET', i, JSON.stringify(this.tokens[i]));
 
     if (i < this.tokens.length) return this.tokens[i];
-    else throw new EndOfFileError();
+    else throw new SyntacticError('End of file');
   }
 
   getToken (i) {
@@ -31,10 +31,17 @@ class SyntacticAnalyser
     return this.get(i).class;
   }
 
-  isClass(i, clas) {
-    return this.getClass(i).reduce((result, value) => {
-      return value.equals(clas);
-    }, false);
+  isClass(i, ...classes)
+  {
+    let result;
+
+    this.getClass(i).forEach(aClass => {
+      classes.forEach(bClass => {
+        return !(result = aClass.equals(bClass));
+      });
+    });
+
+    return result;
   }
 
   isWord (i) {
@@ -54,15 +61,15 @@ class SyntacticAnalyser
   analyse (tokens)
   {
     this.tokens = tokens;
-    // console.log('TOKENS', JSON.stringify(tokens));
+    this.tokens.forEach(token => console.log('TOKEN', JSON.stringify(token)));
 
     let i = this.matchMultiplePhrase(0);
     
     if (!this.isPhraseEndDelimitier(i))
-      throw new Error('Missing end punctuation');
+      throw new SyntacticError('Missing end punctuation');
 
     if (this.has(i + 1))
-      throw new Error('Remaining content');
+      throw new SyntacticError('Remaining content');
   }
 
   matchMultiplePhrase (i)
@@ -71,9 +78,9 @@ class SyntacticAnalyser
     i = this.matchPhrase(i);
 
     if (state === i)
-      throw new Error('Didn\'t find a phrase');
+      throw new SyntacticError('Didn\'t find a phrase');
 
-    console.log('Found phrase: %s', this.tokens.slice(state, i).map(token => token.token));
+    console.log('Found phrase (%d): %s', i, this.tokens.slice(state, i).map(token => token.token));
 
     if (this.isPhraseDelimitier(i) && this.has(i + 1) && this.isWord(i + 1))
       return this.matchMultiplePhrase(i + 1);
@@ -83,19 +90,25 @@ class SyntacticAnalyser
 
   matchPhrase (i)
   {
-    const state = i;
+    const subjectState = i;
     i = this.matchSubject(i);
-    if (i === state) return state;
+    if (i === subjectState) return subjectState;
 
-    console.log('Found subject (%d): %s', i, this.tokens.slice(state, i).map(token => token.token));
+    console.log('Found subject (%d): %s', i, this.tokens.slice(subjectState, i).map(token => token.token));
 
-    while (!this.isPhraseDelimitier(i)) i++;
+    const predicateState = i;
+    i = this.matchPredicate(i);
+    if (i === predicateState) return subjectState;
+
+    console.log('Found predicate (%d): %s', i, this.tokens.slice(predicateState, i).map(token => token.token));
+
     return i;
   }
 
   // ter = sub [pre ter]
   // suj = [art] [adj] ter
-  // prd = ver [art|pre ter] [adv]
+  // com = [art|pre ter] [adv]
+  // prd = ver com
   // suj prd
 
   // os felizes amigos de João brincam de bola de gude semanalmente
@@ -110,7 +123,12 @@ class SyntacticAnalyser
     const state = i;
 
     if (this.isClass(i, classification.Article)) i++;
-    if (this.isClass(i, classification.Adjetive)) i++;
+    if (this.isClass(i, classification.Adjetive))
+    {
+      const j = i + 1;
+      const result = this.matchTerm(j);
+      if (result > j) return result;
+    }
 
     const result = this.matchTerm(i);
     return result === i ? state : result;
@@ -119,28 +137,39 @@ class SyntacticAnalyser
   matchTerm (i)
   {
     if (!this.isClass(i, classification.Noun)) return i;
-    if (this.isClass(++i, classification.Preposition))
+
+    if (this.isClass(i + 1, classification.Preposition))
     {
-      const state = i + 1;
+      const state = i + 2;
       const result = this.matchTerm(state);
-      return result === state ? i : result;
+      if (result > state) return result;
     }
 
-    return i;
+    return i + 1;
   }
 
   matchPredicate (i)
   {
-
+    if (!this.isClass(i, classification.Verb)) return i;
+    else return this.matchComplement(i + 1);
   }
 
   matchComplement (i)
   {
+    if (this.isClass(i, classification.Article, classification.Preposition))
+    {
+      const j = i + 1;
+      i = this.matchTerm(j);
+      if (i === j) return j - 1;
+    }
 
+    return this.isClass(i, classification.Adverb) ? i + 1 : i;
   }
 }
 
 
-module.exports = function (tokens) {
+exports.Analyser = SyntacticAnalyser;
+exports.Error = SyntacticError;
+exports.analyse = function (tokens) {
   new SyntacticAnalyser().analyse(tokens);
 }

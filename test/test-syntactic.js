@@ -5,7 +5,7 @@ const classification = require('../src/classification');
 
 async function test(text) {
   console.log('test: %s', text);
-  syntactic(await lexical.break(text));
+  syntactic.analyse(await lexical.break(text));
 }
 
 async function fail(text) {
@@ -23,6 +23,7 @@ async function fail(text) {
 (async () => {
 
 try {
+  await test('os feitos de hobbit são contados até hoje.');
   await test('os felizes amigos de João brincam de bola de gude semanalmente.');
   await test('os amigos de João brincam de bola de gude semanalmente.');
   await test('amigos de João brincam de bola de gude semanalmente.');
@@ -30,7 +31,6 @@ try {
   await test('amigos brincam de bola semanalmente.');
   await test('amigos brincam de bola.');
   await test('amigos brincam.');
-  // await test('olá, meu nome é mateus. qual o seu nome?');
   // await fail('olá, meu nome é mateus. qual o seu nome');
   // await fail('olá,, meu nome é mateus. qual o seu nome');
 
