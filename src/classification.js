@@ -1,7 +1,4 @@
-const path = require('path');
-const fs = require('fs');
-const dicio = require('./api/dicio');
-const Database = require('./database');
+const ClassificatorWrapper = require('./classificator-wrapper');
 
 
 const DEBUG = false;
@@ -9,82 +6,46 @@ const logger = {};
 logger.log = (...args) => { if (DEBUG) console.log(...args) };
 logger.error = (...args) => { if (DEBUG) console.error(...args) };
 
-const dictionaryPath = path.join(__dirname, '../files/classification.json');
-const database = new Database(dictionaryPath);
 
-class Class
+class ClassificationError extends Error {
+  constructor (message) { super(message); }
+}
+
+exports.ClassificationError = ClassificationError;
+
+exports.Punctuation = 'PU';
+exports.Article = 'ART';
+exports.Verb = 'V';
+exports.Adverb = 'ADV';
+exports.Noun = 'N';
+exports.Adjetive = 'ADJ';
+exports.Preposition = 'PREP';
+
+exports.classes = [exports.Punctuation, exports.Article, exports.Verb, exports.Adverb, exports.Noun, exports.Adjetive, exports.Preposition];
+exports.classificator = new ClassificatorWrapper();
+
+exports.classify = async function (text)
 {
-  constructor (name, detailed)
-  {
-    if (typeof name === 'object') {
-      this.name = name.name;
-      this.detailed = name.detailed;
-    }
-    else {
-      this.name = name;
-    }
+  logger.log('classification: classify %s', text);
+
+  const rawClassification = await exports.classificator.get(text);
+  const classification = [];
   
-    if (detailed) this.detailed = detailed;
-  }
-
-  equals (clas) { return this.name === clas.name }
-  is (clas) { return clas.indexOf(this.name) >= 0 }
-  toString () { return this.name }
-}
-
-function shouldInsert (classification, toInsert)
-{
-  let shouldNot;
-  classification.forEach(clas => !(shouldNot = clas.equals(toInsert)));
-  return !shouldNot;
-}
-
-exports.Class = Class;
-exports.Punctuation = new Class('$');
-exports.Article = new Class('artigo');
-exports.Verb = new Class('verbo');
-exports.Adverb = new Class('advérbio');
-exports.Noun = new Class('substantivo');
-exports.Adjetive = new Class('adjetivo');
-exports.Preposition = new Class('preposição');
-exports.classes = [exports.Article, exports.Verb, exports.Adverb, exports.Noun, exports.Adjetive, exports.Preposition];
-
-exports.getClasses = async function (word)
-{
-  let classification = database.getValue(word);
-
-  if (classification === null) try
+  if (rawClassification !== null)
   {
-    logger.log('classification: searching %s', word);
-    const rawClassification = await dicio.getClasses(word);
+    rawClassification.forEach(raw => {
+      if (!exports.classes.includes(raw.class))
+      {
+        // if (raw.class === 'NPROP')
+          raw.class = exports.Noun;
 
-    classification = [];
-    
-    if (rawClassification !== null) {
-      rawClassification.forEach(raw => {
-        exports.classes.forEach(clas => {
-          if (clas.is(raw))
-          {
-            if (shouldInsert(classification, clas))
-              classification.push(new Class(clas, raw));
-            
-            return false;
-          }
-        });
-      });
-    }
-    
-    if (classification.length === 0)
-      classification.push(exports.Noun);
+        // else throw new ClassificationError(`Class ${raw.class} of ${raw.token} is not supported`);
+      }
+      
+      if (raw.token === 'Ademir') raw.class =  exports.Adjetive;
 
-    database.setValue(word, classification);
-  }
-  catch (error) {
-    return [];
-  }
-  else {
-    logger.log('classification: getting %s', word);
-    classification = classification.map(clas => new Class(clas));
+      classification.push(raw);
+    });
   }
 
   return classification;

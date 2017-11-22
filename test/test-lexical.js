@@ -1,69 +1,41 @@
 const _ = require('underscore');
 const lexical = require('../src/lexical');
+const classification = require('../src/classification');
+const Class = classification.Class;
 
 
-function createLogMethod(method) {
-  return function () {
-    const parsedArguments = [];
+const text = 'Os felizes amigos de João brincam de bola de gude semanalmente.\nCoisa!';
 
-    for (let i in arguments)
-      if (typeof arguments[i] === 'object' && !(arguments[i] instanceof Error))
-        parsedArguments.push('*' + JSON.stringify(arguments[i]));
-      else
-        parsedArguments.push(arguments[i]);
+Promise.resolve()
+  .then(() => {
+    console.log('Searching data of "' + text + '"');
+    return lexical(text);
+  })
+  .then(data => {
+    const expected = [
+      { token: 'Os', class: classification.Article },
+      { token: 'felizes', class: classification.Adjetive },
+      { token: 'amigos', class: classification.Noun },
+      { token: 'de', class: classification.Preposition },
+      { token: 'João', class: classification.Noun },
+      { token: 'brincam', class: classification.Verb },
+      { token: 'de', class: classification.Preposition },
+      { token: 'bola', class: classification.Noun },
+      { token: 'de', class: classification.Preposition },
+      { token: 'gude', class: classification.Noun },
+      { token: 'semanalmente', class: classification.Adverb },
+      { token: '.', class: classification.Punctuation },
+      { token: 'Coisa', class: classification.Noun },
+      { token: '!', class: classification.Punctuation }
+    ];
 
-    method(...parsedArguments);
-  }
-}
-
-console._log = console.log;
-console._error = console.error;
-
-console.log = createLogMethod(console.log.bind(console));
-console.error = createLogMethod(console.error.bind(console));
-
-
-const text = 'olá! meu nome é mateus pires. como vai você? eu vou bem. ta, xau';
-const expected = [
-  'olá', '!', 'meu', 'nome', 'é', 'mateus', 'pires', '.', 'como',
-  'vai', 'você', '?', 'eu', 'vou', 'bem', '.', 'ta', ',', 'xau'
-];
-const expectedOnlyWords = [
-  'olá', 'meu', 'nome', 'é', 'mateus', 'pires', 'como',
-  'vai', 'você', 'eu', 'vou', 'bem', 'ta', 'xau'
-];
-
-(async () => {
-  try {
-    console.log('Breking:', text);
-    const result = (await lexical.break(text)).map(result => result.token);
-    
-    if (_.isEqual(result, expected))
+    if (_.isEqual(data, expected))
       console.log('Success!');
-    else
-      console.error('The text wasn\'t broke correctly.\nText: %s\nGot: %s\nExpected: %s',
-        text, result, expected);
-
-    console.log('Only words:', text);
-    const resultOnlyWords = (await lexical.onlyWords(text)).map(result => result.token);
-    
-    if (_.isEqual(resultOnlyWords, expectedOnlyWords))
-      console.log('Success!');
-    else
-      console.error('The text wasn\'t broke correctly.\nText: %s\nGot: %s\nExpected: %s',
-        text, resultOnlyWords, expectedOnlyWords);
-
-    const invalidSymbols = '$ * & "# @ -+- ~ [] ()';
-    console.log('Invalid symbols:', invalidSymbols);
-    try {
-      await lexical.break(invalidSymbols);
-      console.error('Invalid symbol wasn\'t notified');
+    else {
+      console.log('Data:', JSON.stringify(data));
+      console.log('\nExpected:', JSON.stringify(expected));
+      console.log('\nError!');
     }
-    catch (error) {
-      console.log('Success!');
-    }
-  }
-  catch (error) {
-    console.error(error);
-  }
-})();
+  })
+  .catch(console.error)
+  .then(() => classification.classificator.close());
